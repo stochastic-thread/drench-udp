@@ -5,7 +5,10 @@ import requests
 import socket
 import tparser
 import hashlib
+import struct
 import reactor
+import requests
+from random import randrange
 import peer
 import time
 import os
@@ -73,13 +76,17 @@ class Torrent(object):
 
     def __init__(self, torrent_path, directory='', port=55308,
                  download_all=False, visualizer=None):
+        print("torrent path is...")
+        print(torrent_path)
         torrent_dict = tparser.bdecode_file(torrent_path)
+        print(torrent_dict)
         self.torrent_dict = torrent_dict
         self.peer_dict = {}
         self.peer_ips = []
         self.port = port
         self.download_all = download_all
         self.r = None
+        self.is_udp = False
         self.tracker_response = None
         self.peer_dict = {}
         self.hash_string = None
@@ -171,6 +178,91 @@ class Torrent(object):
         payload['event'] = 'started'
         return payload
 
+    def handle_udp(self,payload):
+        ip_to_socket = dict()
+        lol = self.torrent_dict['announce-list']
+        lol = lol[0:1]
+        for l in lol:
+            print(l)
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+            last = l.pop()
+            ip_to_socket[last] = sock
+            a = last.split("://")
+            protocol = a[0]
+            url = a[1]
+            url_po = url.split(":")
+            url = url_po[0]
+            port = url_po[1].split("/announce")[0]
+            #print(protocol, url, port)
+
+            i = (url,int(port))
+
+            sock.settimeout(10)
+            
+            sock.connect(i)
+            connection_id = 0x41727101980
+            action = 0
+            transaction_id = randrange(1,65535)
+            request = struct.pack('>QLL',connection_id, action, transaction_id)
+
+            sent = sock.send(request)
+            response = sock.recv(68)
+            action,transaction_id,connection_id=struct.unpack(">LLQ",response)
+
+            cid = connection_id
+            action = 1
+            tid = transaction_id
+            info_hash = payload["info_hash"]
+            peer_id = payload["peer_id"]
+            downloaded = payload["downloaded"]
+            left = payload["left"]
+            uploaded = payload["uploaded"]
+            event = payload["event"]
+            ip = 0
+            key = 0
+            num_want = 10
+            port = DEFAULT_PORT
+
+            event_hash = dict()
+            event_hash['none'] = 0
+            event_hash['completed'] = 1
+            event_hash['started'] = 2
+            event_hash['stopped'] = 3
+            lst = [cid,action,tid,info_hash,peer_id,downloaded,uploaded,left,event_hash[event],ip,key,num_want,port]
+            for x in lst:
+                print(x, type(x))
+            request = struct.pack('>QLL20s20sQQQLLLLH',cid,action,tid,info_hash,peer_id,downloaded,uploaded,left,event_hash[event],ip,key,num_want,port)
+
+            sent = sock.send(request)
+            print("Send!!!")
+            response = sock.recv(1024)
+            #print(len(response))
+            # act, tr_id, interval, leechers, seeders = struct.unpack('>LLLLL', response)
+            action = struct.unpack('>LLLLL', response[:20])
+            (a,b,c,d,e) = action
+           
+            lenbytes = len(bytes(response[20:]))
+            print(lenbytes)
+            num_peers = lenbytes/6
+            newstr = 'LH'*num_peers
+            rest_of_response = struct.unpack(">"+newstr,bytes(response[20:]))
+            print(rest_of_response)
+            ips = []
+            ports = []
+            for ind, item in enumerate(rest_of_response):
+                if ind % 2 == 0:
+                    ips.append(item)
+                else:
+                    ports.append(item)
+
+            couple = []
+            for ind, item in enumerate(ips):
+                couple.append((self.int_to_ip(ips[ind]), ports[ind]))
+                self.peer_ips.append((self.int_to_ip(ips[ind]), ports[ind]))
+
+            for x in couple: print(x)
+
     # TODO -- refactor?
     def tracker_request(self):
         '''
@@ -182,15 +274,27 @@ class Torrent(object):
         payload = self.build_payload()
 
         if self.torrent_dict['announce'].startswith('udp'):
-            raise Exception('need to deal with UDP')
+            # self.r = requests.get(self.torrent_dict['announce'],
+            #                       params=payload)
+            # print(self.torrent_dict.keys())
+            # print(self.torrent_dict["announce"])
+            self.is_udp = True
+            # print(payload)
+            self.handle_udp(payload)
+#            raise Exception('need to deal with UDP')
 
         else:
             self.r = requests.get(self.torrent_dict['announce'],
                                   params=payload)
+            print(self.torrent_dict['announce'])
 
-        # Decoding response from tracker
-        self.tracker_response = tparser.bdecode(self.r.content)
-        self.get_peer_ips()
+            # Decoding response from tracker
+            print("Content")
+            print(self.r.content)
+            self.tracker_response = tparser.bdecode(self.r.content)
+            print("tracker response is ...")
+            print(self.tracker_response)
+            self.get_peer_ips()
 
     def get_peer_ips(self):
         '''
@@ -202,10 +306,13 @@ class Torrent(object):
         while presponse:
             peer_ip = (('.'.join(str(x) for x in presponse[0:4]),
                        256 * presponse[4] + presponse[5]))
+            print(peer_ip)
             if peer_ip not in self.peer_ips:
                 self.peer_ips.append(peer_ip)
             presponse = presponse[6:]
 
+    def int_to_ip(self, i):
+        return str((i >> 24) & 0xFF) + "." + str((i >> 16) & 0xFF) + "." + str((i >> 8) & 0xFF) + "." + str(i & 0xFF)
 # TODO -- refactor this so it takes peer IPs or
 # sockets (in the case of incoming connections)
     def handshake_peers(self):
@@ -224,6 +331,8 @@ class Torrent(object):
 
         packet = ''.join([chr(pstrlen), pstr, chr(0) * 8, info_hash,
                           peer_id])
+        print("packet: ")
+        print(packet)
         print "Here's my packet {}".format(repr(packet))
         # TODO -- add some checks in here so that I'm talking
         # to a maximum of 30 peers
@@ -236,11 +345,21 @@ class Torrent(object):
         for i in self.peer_ips:
             if len(self.peer_dict) >= 30:
                 break
-            s = socket.socket()
-            s.setblocking(True)
-            s.settimeout(0.5)
+            if self.is_udp == True:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            else:
+                s = socket.socket()
+            s.settimeout(3)
             try:
+                # s.setblocking(True)
+                # s.settimeout(0.5)
                 s.connect(i)
+                # connection_id = 0x41727101980
+                # action = 0
+                # transaction_id = randrange(1,65535)
+                # request = struct.pack('>QLL',connection_id, action, transaction_id)
+                s.send(packet)
+
             except socket.timeout:
                 print '{} timed out on connect'.format(s.fileno())
                 continue
@@ -249,7 +368,9 @@ class Torrent(object):
                 continue
             except:
                 raise Exception
-            s.send(packet)
+            
+
+            
             try:
                 data = s.recv(68)  # Peer's handshake - len from docs
                 if data:
@@ -263,11 +384,12 @@ class Torrent(object):
 
     def initpeer(self, sock):
         '''
-        Creates a new peer object for a nvalid socket and adds it to reactor's
+        Creates a new peer object for a valid socket and adds it to reactor's
         listen list
         '''
         location_json = requests.request("GET", "http://freegeoip.net/json/"
                                          + sock.getpeername()[0]).content
+        print(location_json)
         location = json.loads(location_json)
         tpeer = peer.Peer(sock, self.reactor, self, location)
         self.peer_dict[sock] = tpeer

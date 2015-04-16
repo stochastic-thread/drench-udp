@@ -20,6 +20,7 @@ class Peer(object):
         self.sock.setblocking(True)
         self.reactor = reactor
         self.torrent = torrent
+        self.piece = self.init_piece()
 
         # What am I trying to do?
         # I only want self.location to include keys and vals
