@@ -1,4 +1,4 @@
-#Drench
+#Drench (originally from https://github.com/jefflovejapan/drench)
 
 Drench is a lightweight BitTorrent client written in Python. There are a couple of nice features, like the ability to download a subset of all the files in the torrent and exiting cleanly once the download is complete. 
 

@@ -198,7 +198,8 @@ class Torrent(object):
 
             i = (url,int(port))
 
-            sock.settimeout(10)
+            sock.setblocking(False)
+            sock.settimeout(3)
             
             sock.connect(i)
             connection_id = 0x41727101980
@@ -236,7 +237,7 @@ class Torrent(object):
 
             sent = sock.send(request)
             print("Send!!!")
-            response = sock.recv(1024)
+            response = sock.recv(98)
             #print(len(response))
             # act, tr_id, interval, leechers, seeders = struct.unpack('>LLLLL', response)
             action = struct.unpack('>LLLLL', response[:20])
@@ -346,16 +347,10 @@ class Torrent(object):
         for i in self.peer_ips:
             if len(self.peer_dict) >= 30:
                 break
-            if self.is_udp == True:
-                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            else:
-                s = socket.socket()
-            s.settimeout(5)
-            s.setblocking(False)
-
             try:
-                # s.setblocking(True)
-                # s.settimeout(0.5)
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.setblocking(False)
+                s.settimeout(0.1)
                 s.connect(i)
                 # connection_id = 0x41727101980
                 # action = 0
