@@ -342,6 +342,7 @@ class Torrent(object):
         # Think about what we're doing -- using this list to create
         # new peer objects. Should make this functional, that way I
         # can also call when I get new peers.
+
         for i in self.peer_ips:
             if len(self.peer_dict) >= 30:
                 break
@@ -349,7 +350,9 @@ class Torrent(object):
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             else:
                 s = socket.socket()
-            s.settimeout(3)
+            s.settimeout(5)
+            s.setblocking(False)
+
             try:
                 # s.setblocking(True)
                 # s.settimeout(0.5)
@@ -378,7 +381,7 @@ class Torrent(object):
                     self.initpeer(s)
             except:
                 print '{} timed out on recv'.format(s.fileno())
-                continue
+
         else:
             self.peer_ips = []
 
