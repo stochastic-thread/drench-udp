@@ -182,11 +182,11 @@ class Torrent(object):
         ip_to_socket = dict()
         lol = self.torrent_dict['announce-list']
         lol = lol[0:1]
-        for l in lol:
-            print(l)
+        for litem in lol:
+            print(litem)
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-            last = l.pop()
+            last = litem.pop()
             ip_to_socket[last] = sock
             a = last.split("://")
             protocol = a[0]
@@ -344,38 +344,36 @@ class Torrent(object):
         # new peer objects. Should make this functional, that way I
         # can also call when I get new peers.
 
-        while True:
-            for i in self.peer_ips:
-                if len(self.peer_dict) >= 30:
-                    break
+        for i in self.peer_ips:
+            if len(self.peer_dict) >= 30:
+                break
+            try:
+                s = socket.create_connection(l, 5, ('0.0.0.0',DEFAULT_PORT))
+                #s = socket.socket()
+                # connection_id = 0x41727101980
+                # action = 0
+                # transaction_id = randrange(1,65535)
+                # request = struct.pack('>QLL',connection_id, action, transaction_id)
+                s.send(packet)
                 try:
-                    s = socket.create_connection(l, 5, ('0.0.0.0',DEFAULT_PORT))
-                    #s = socket.socket()
-                    # connection_id = 0x41727101980
-                    # action = 0
-                    # transaction_id = randrange(1,65535)
-                    # request = struct.pack('>QLL',connection_id, action, transaction_id)
-                    s.send(packet)
-                    try:
-                        data = s.recv(68)  # Peer's handshake - len from docs
-                        if data:
-                            print 'From {} received: {}'.format(s.fileno(), repr(data))
-                            self.initpeer(s)
-                    except:
-                        print '{} timed out on recv'.format(s.fileno())
-                except socket.timeout:
-                    print '{} timed out on connect'.format(s.fileno())
-                    continue
-                except socket.error:
-                    print '{} threw a socket error'.format(s.fileno())
-                    continue
-                except Exception as ex:
-                    template = "An exception of type {0} occured. Arguments:\n{1!r}"
-                    message = template.format(type(ex).__name__, ex.args)
-                    print message
-
-            else:
-                self.peer_ips = []
+                    data = s.recv(68)  # Peer's handshake - len from docs
+                    if data:
+                        print 'From {} received: {}'.format(s.fileno(), repr(data))
+                        self.initpeer(s)
+                except:
+                    print '{} timed out on recv'.format(s.fileno())
+            except socket.timeout:
+                print '{} timed out on connect'.format(s.fileno())
+                continue
+            except socket.error:
+                print '{} threw a socket error'.format(s.fileno())
+                continue
+            except Exception as ex:
+                template = "An exception of type {0} occured. Arguments:\n{1!r}"
+                message = template.format(type(ex).__name__, ex.args)
+                print message
+        else:
+            self.peer_ips = []
 
     def initpeer(self, sock):
         '''
