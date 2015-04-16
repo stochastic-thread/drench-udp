@@ -355,26 +355,24 @@ class Torrent(object):
                     # action = 0
                     # transaction_id = randrange(1,65535)
                     # request = struct.pack('>QLL',connection_id, action, transaction_id)
-
-
+                    s.send(packet)
+                    try:
+                        data = s.recv(68)  # Peer's handshake - len from docs
+                        if data:
+                            print 'From {} received: {}'.format(s.fileno(), repr(data))
+                            self.initpeer(s)
+                    except:
+                        print '{} timed out on recv'.format(s.fileno())
                 except socket.timeout:
                     print '{} timed out on connect'.format(s.fileno())
                     continue
                 except socket.error:
                     print '{} threw a socket error'.format(s.fileno())
                     continue
-                except:
-                    raise Exception
-                
-                s.send(packet)
-                
-                try:
-                    data = s.recv(68)  # Peer's handshake - len from docs
-                    if data:
-                        print 'From {} received: {}'.format(s.fileno(), repr(data))
-                        self.initpeer(s)
-                except:
-                    print '{} timed out on recv'.format(s.fileno())
+                except Exception as ex:
+                    template = "An exception of type {0} occured. Arguments:\n{1!r}"
+                    message = template.format(type(ex).__name__, ex.args)
+                    print message
 
             else:
                 self.peer_ips = []
